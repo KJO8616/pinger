@@ -10,6 +10,7 @@ import warnings
 
 ICMP_ECHO_REQUEST = 8
 
+
 def checksum(string):
     csum = 0
     countTo = (len(string) // 2) * 2
@@ -32,6 +33,7 @@ def checksum(string):
     answer = answer >> 8 | (answer << 8 & 0xff00)
     return answer
 
+
 def receiveOnePing(mySocket, ID, timeout, destAddr):
     timeLeft = timeout
 
@@ -48,18 +50,22 @@ def receiveOnePing(mySocket, ID, timeout, destAddr):
         # Fill in start
 
         # Fetch the ICMP header from the IP packet
-    header = recPacket[20:28]
-       type, code, checksum, packID, seqNo = struct.unpack("bbHHh", header)
-       if type == 0 and packID == ID:
-          bytesInDouble = struct.calcsize("d")
-          timeSent = struct.unpack("d", recPacket[28:28 + bytesInDouble])[0]
-          ttls = struct.unpack("c", recPacket[8:9])[0]  
-          rtt = timeReceived - timeSent
-          return (rtt, ttls)
+        hType, code, checksum, hID, seq = struct.unpack("bbHHh", recPacket[20:28])
+
+        if hID == ID and hType == 0 and code == 0:
+            timeSent, = struct.unpack("d", recPacket[28:])
+            returnTime = (timeReceived - timeSent) * 1000
+            ipHeader = struct.unpack('!BBHHHBBH4s4s', recPacket[:20])
+            ttl = ipHeader[5]
+            size = len(recPacket)
+
+            print("Reply from {}: bytes={} time={:.7f}ms TTL={:d}".format(destAddr, size, returnTime, ttl))
+            return returnTime
         # Fill in end
         timeLeft = timeLeft - howLongInSelect
         if timeLeft <= 0:
             return "Request timed out."
+
 
 def sendOnePing(mySocket, destAddr, ID):
     # Header is type (8), code (8), checksum (16), id (16), sequence (16)
@@ -80,7 +86,6 @@ def sendOnePing(mySocket, destAddr, ID):
     else:
         myChecksum = htons(myChecksum)
 
-
     header = struct.pack("bbHHh", ICMP_ECHO_REQUEST, 0, myChecksum, ID, 1)
     packet = header + data
 
@@ -88,6 +93,7 @@ def sendOnePing(mySocket, destAddr, ID):
 
     # Both LISTS and TUPLES consist of a number of objects
     # which can be referenced by their position number within the object.
+
 
 def doOnePing(destAddr, timeout):
     icmp = getprotobyname("icmp")
@@ -101,36 +107,35 @@ def doOnePing(destAddr, timeout):
     mySocket.close()
     return delay
 
+
 def ping(host, timeout=1):
-    # timeout=1 means: If one second goes by without a reply from the server,   
+    # timeout=1 means: If one second goes by without a reply from the server,
     # the client assumes that either the client's ping or the server's pong is lost
     dest = gethostbyname(host)
     print("\nPinging " + dest + " using Python:")
     print("")
-    
-    response = pd.DataFrame(columns=['bytes','rtt','ttl']) #This creates an empty dataframe with 3 headers with the column specific names declared
-    
-    #Send ping requests to a server separated by approximately one second
-    #Add something here to collect the delays of each ping in a list so you can calculate vars after your ping
- count = 0
-   val = []
-  # Send ping requests to a server separated by approximately one second
-   for i in range(0,4):
-       delay = doOnePing(dest, timeout)
-       val.append(delay[0])
-      # print(delay)
-       time.sleep(1)  # one second
-         
-   print(val)
-   if len(val) > 0:      
-       packet_min = min(val) * 1000
-       packet_avg = sum(val) / len(val) * 1000
-       packet_max = max(val) * 1000
-       stdev_var =  list(val) * 1000
-       vars = [str(round(packet_min, 2)), str(round(packet_avg, 2)), str(round(packet_max, 2)),str(round(statistics.stdev(stdev_var), 2))]
-   else:
+
+    response = pd.DataFrame(columns=['bytes', 'rtt', 'ttl'])  # This creates an empty dataframe with 3 headers with the column specific names declared
+
+    for i in range(0, 4):
+        delay = doOnePing(dest, timeout)
+        if delay != "Request timed out.":
+            packet.append(delay)
+        print(delay)
+        time.sleep(1)  # one second
+
+    if len(packet) == 0:  # if length of list is 0 set all values to 0
         vars = ['0', '0.0', '0', '0.0']
-   return vars
+    else:
+        packet_min = min(packet)
+        packet_avg = (sum(packet) / 4)
+        packet_max = max(packet)
+        stdev_var = statistics.stdev(packet)
+        # 1000 to return milliseconds
+        vars = [str(round(packet_min * 1000, 2)), str(round(packet_avg * 1000, 2)), str(round(packet_max * 1000, 2)),
+                str(round(stdev_var * 1000, 2))]
+        # end possible
+    return vars
 
 
 if __name__ == '__main__':
