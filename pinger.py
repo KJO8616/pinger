@@ -136,7 +136,6 @@ def ping(host, timeout=1):
         packet_min = min(delays)
         packet_max = max(delays)
         packet_avg = sum(delays) / total
-        stdev_var = stdev(delays)
     else:
         vars = ['0', '0.0', '0', '0.0']
     vars = pd.DataFrame(columns=['min', 'avg', 'max', 'stddev'])
@@ -145,3 +144,7 @@ def ping(host, timeout=1):
                        ignore_index=True)
     print(vars)  # make sure your vars data you are returning resembles acceptance criteria
     return vars
+
+
+if __name__ == '__main__':
+    ping("google.com"
