@@ -5,11 +5,11 @@ import struct
 import time
 import select
 import binascii
-# Should use stdev
-from statistics import stdev
+import pandas as pd
+import warnings
+warnings.simplefilter(action='ignore', category=FutureWarning)
 
 ICMP_ECHO_REQUEST = 8
-
 
 def checksum(string):
     csum = 0
@@ -33,8 +33,6 @@ def checksum(string):
     answer = answer >> 8 | (answer << 8 & 0xff00)
     return answer
 
-
-
 def receiveOnePing(mySocket, ID, timeout, destAddr):
     timeLeft = timeout
 
@@ -49,25 +47,13 @@ def receiveOnePing(mySocket, ID, timeout, destAddr):
         recPacket, addr = mySocket.recvfrom(1024)
 
         # Fill in start
+
         # Fetch the ICMP header from the IP packet
-        hType, code, checksum, hID, seq = struct.unpack("bbHHh", recPacket[20:28])
 
-        if hID == ID and hType == 0 and code == 0:
-            timeSent, = struct.unpack("d", recPacket[28:])
-            returnTime = (timeReceived - timeSent) * 1000
-            ipHeader = struct.unpack('!BBHHHBBH4s4s' , recPacket[:20])
-            ttl = ipHeader[5]
-            size = len(recPacket)
-
-            print("Reply from {}: bytes={} time={:.7f}ms TTL={:d}".format(destAddr, size, returnTime, ttl))
-            return returnTime
         # Fill in end
-
-        print("Request timed out.")
         timeLeft = timeLeft - howLongInSelect
         if timeLeft <= 0:
             return "Request timed out."
-
 
 def sendOnePing(mySocket, destAddr, ID):
     # Header is type (8), code (8), checksum (16), id (16), sequence (16)
@@ -94,15 +80,13 @@ def sendOnePing(mySocket, destAddr, ID):
 
     mySocket.sendto(packet, (destAddr, 1))  # AF_INET address must be tuple, not str
 
-
     # Both LISTS and TUPLES consist of a number of objects
     # which can be referenced by their position number within the object.
 
 def doOnePing(destAddr, timeout):
     icmp = getprotobyname("icmp")
 
-
-    # SOCK_RAW is a powerful socket type. For more details:   http://sockraw.org/papers/sock_raw
+    # SOCK_RAW is a powerful socket type. For more details:   https://sock-raw.org/papers/sock_raw
     mySocket = socket(AF_INET, SOCK_RAW, icmp)
 
     myID = os.getpid() & 0xFFFF  # Return the current process i
@@ -111,38 +95,26 @@ def doOnePing(destAddr, timeout):
     mySocket.close()
     return delay
 
-
 def ping(host, timeout=1):
-    # timeout=1 means: If one second goes by without a reply from the server,
-    # the client assumes that either the client's ping or the server's pong is lost
     dest = gethostbyname(host)
-    print("Pinging " + dest + " using Python:")
+    resps = []
+    print("\nPinging " + dest + " using Python:")
     print("")
-    # Calculate vars values and return them
-    packet_min, packet_avg, packet_max, stdev_var = 0, 0.0, 0, 0.0
-    delays = []
-    # Send ping requests to a server separated by approximately one second
-    for i in range(0,4):
-        delay = doOnePing(dest, timeout)
-        if delay != "Request timed out.":
-            delays.append(delay)
-        #print(delay)
+
+    response = pd.DataFrame(columns=['bytes', 'rtt', 'ttl'])
+
+    for i in range(0, 4):
+        result = doOnePing(dest, timeout)
+        resps.append(result)
         time.sleep(1)  # one second
 
-    # Change values if we recieved at least one pong
-    total = len(delays)
-    if total != 0:
-        packet_min = min(delays)
-        packet_max = max(delays)
-        packet_avg = sum(delays) / total
-        stdev_var = stdev(delays)
-    else:
-        vars = ['0', '0.0', '0', '0.0']
+    return resps
+
     vars = pd.DataFrame(columns=['min', 'avg', 'max', 'stddev'])
-    vars = vars.append({'min': str(round(response['rtt'].min(), 2)), 'avg': str(round(response['rtt'].mean(), 2)),
+    vars = vars.concat({'min': str(round(response['rtt'].min(), 2)), 'avg': str(round(response['rtt'].mean(), 2)),
                         'max': str(round(response['rtt'].max(), 2)), 'stddev': str(round(response['rtt'].std(), 2))},
                        ignore_index=True)
-    print(vars)  # make sure your vars data you are returning resembles acceptance criteria
+    print(vars)
     return vars
 
 if __name__ == '__main__':
