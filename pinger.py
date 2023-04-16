@@ -5,8 +5,9 @@ import struct
 import time
 import select
 import binascii
-# Should use stdev
-from statistics import stdev
+import pandas as pd
+import warnings
+warnings.simplefilter(action='ignore', category=FutureWarning)
 
 ICMP_ECHO_REQUEST = 8
 
@@ -136,16 +137,11 @@ def ping(host, timeout=1):
         packet_max = max(delays)
         packet_avg = sum(delays) / total
         stdev_var = stdev(delays)
-
-    vars = [str(round(packet_min, 2)), str(round(packet_avg, 2)), str(round(packet_max, 2)), str(round(stdev_var, 2))]
-
-    # Prints same results table as displayed in the assignment document.
-    print("")
-    print("--- {} ping statistics ---".format(host))
-    print("4 packets transmitted, {:d} packets received, {:.1f}% packet loss".format(total, float(1- total/4) * 100))
-    print("round-trip min/avg/max/stddev = {}/{}/{}/{} ms".format(vars[0], vars[1], vars[2], vars[3]))
-
+    else:
+        vars = ['0', '0.0', '0', '0.0']
+    vars = pd.DataFrame(columns=['min', 'avg', 'max', 'stddev'])
+    vars = vars.append({'min': str(round(response['rtt'].min(), 2)), 'avg': str(round(response['rtt'].mean(), 2)),
+                        'max': str(round(response['rtt'].max(), 2)), 'stddev': str(round(response['rtt'].std(), 2))},
+                       ignore_index=True)
+    print(vars)  # make sure your vars data you are returning resembles acceptance criteria
     return vars
-
-if __name__ == '__main__':
-    ping("google.com")
